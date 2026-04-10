@@ -1,19 +1,32 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import requests
 from fastapi.middleware.cors import CORSMiddleware
+import google.generativeai as genai
+from groq import Groq
 
 load_dotenv()
 
+# 🔑 API KEYS
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 HF_API_KEY = os.getenv("HF_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+# 🔌 Clients
 client = OpenAI(api_key=OPENAI_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+for m in genai.list_models():
+    print(m.name, m.supported_generation_methods)
 
+# 🚀 App
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,125 +35,173 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 📦 Request Model
 class ChatRequest(BaseModel):
     messages: list
-    user_id: str = "guest"
     provider: str = "auto"
 
-# 🔧 Convert messages → prompt
+
+# 🔧 Utils
 def format_messages(messages):
     return "\n".join([f"{m['role']}: {m['content']}" for m in messages])
 
-# 🟢 Hugging Face call
-def call_huggingface(messages):
-    prompt = format_messages(messages)
 
+# 🟢 HuggingFace
+def call_huggingface(messages):
     response = requests.post(
-        "https://router.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-        headers={
-            "Authorization": f"Bearer {HF_API_KEY}"
-        },
+        "https://router.huggingface.co/hf-inference/models/tiiuae/falcon-7b-instruct",
+        headers={"Authorization": f"Bearer {HF_API_KEY}"},
         json={
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 200,
-                "temperature": 0.7
-            }
-        }
+            "inputs": format_messages(messages),
+            "parameters": {"max_new_tokens": 200, "temperature": 0.7}
+        },
+        timeout=10
     )
 
-    result = response.json()
+    data = response.json()
+    if isinstance(data, list):
+        return data[0]["generated_text"]
 
-    # HF returns list sometimes
-    if isinstance(result, list):
-        return result[0]["generated_text"]
+    return data.get("generated_text", str(data))
 
-    return result.get("generated_text", str(result))
 
-# 🟣 Ollama call
+# 🔵 OpenAI
+def call_openai(messages):
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=messages,
+        temperature=0.7,
+        max_tokens=200
+    )
+    return response.choices[0].message.content
+
+
+# 🟣 Groq
+def call_groq(messages):
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        max_tokens=200,
+        temperature=0.7
+    )
+    return response.choices[0].message.content
+
+
+# 🟡 Gemini
+def call_gemini(messages):
+    model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+
+    chat = model.start_chat(history=[
+        {
+            "role": "user" if m["role"] == "user" else "model",
+            "parts": [m["content"]]
+        } for m in messages[:-1]
+    ])
+
+    response = chat.send_message(messages[-1]["content"])
+    return response.text
+
+OPENROUTER_MODELS = [
+    "meta-llama/llama-3.2-3b-instruct:free",
+    "mistralai/mistral-7b-instruct:free",
+    "google/gemma-2-9b-it:free",
+    "qwen/qwen-2.5-7b-instruct:free"
+]
+# 🟠 OpenRouter
+def call_openrouter(messages):
+    for model in OPENROUTER_MODELS:
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": 200,
+                    "temperature": 0.7
+                },
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+
+        except:
+            continue
+
+    raise Exception("All OpenRouter models failed")
+
+# 🟣 Ollama
 def call_ollama(messages):
-    prompt = format_messages(messages)
-
     response = requests.post(
         "http://localhost:11434/api/generate",
         json={
             "model": "llama3",
-            "prompt": prompt,
+            "prompt": format_messages(messages),
             "stream": False
-        }
+        },
+        timeout=10
     )
 
     return response.json()["response"]
 
+
+# 🧠 Provider Registry
+PROVIDERS = {
+    "openai": call_openai,
+    "groq": call_groq,
+    "gemini": call_gemini,
+    "huggingface": call_huggingface,
+    "openrouter": call_openrouter,
+    "ollama": call_ollama,
+}
+
+
+# ⚡ Smart Auto Fallback Order
+FALLBACK_ORDER = [
+    "groq",        # fastest + free
+    "openrouter",  # multiple models
+    "gemini",      # strong fallback
+    "openai",      # paid (last)
+    "ollama"       # local
+]
+
+# 🚀 Chat Endpoint
 @app.post("/chat")
 async def chat(req: ChatRequest):
-
     provider = req.provider.lower()
 
-    # 🔵 OPENAI ONLY
-    if provider == "openai":
+    # 🎯 Specific provider
+    if provider != "auto":
+        if provider not in PROVIDERS:
+            raise HTTPException(400, f"Invalid provider: {provider}")
+
         try:
-            response = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=req.messages,
-                temperature=0.7,
-                max_tokens=200
-            )
-            return {
-                "reply": response.choices[0].message.content,
-                "source": "openai"
-            }
+            reply = PROVIDERS[provider](req.messages)
+            return {"reply": reply, "source": provider}
         except Exception as e:
-            return {"error": f"OpenAI failed: {str(e)}"}
+            raise HTTPException(500, f"{provider} failed: {str(e)}")
 
-    # 🟢 HUGGINGFACE ONLY
-    if provider == "huggingface":
+    # ⚡ AUTO MODE
+    errors = {}
+
+    for p in FALLBACK_ORDER:
         try:
-            return {
-                "reply": call_huggingface(req.messages),
-                "source": "huggingface"
-            }
+            reply = PROVIDERS[p](req.messages)
+            return {"reply": reply, "source": p}
         except Exception as e:
-            return {"error": f"HuggingFace failed: {str(e)}"}
+            errors[p] = str(e)
 
-    # 🟣 OLLAMA ONLY
-    if provider == "ollama":
-        try:
-            return {
-                "reply": call_ollama(req.messages),
-                "source": "ollama"
-            }
-        except Exception as e:
-            return {"error": f"Ollama failed: {str(e)}"}
+    raise HTTPException(500, {"error": "All providers failed", "details": errors})
 
-    # ⚡ AUTO MODE (fallback chain)
-    # OpenAI → HuggingFace → Ollama
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=req.messages,
-            temperature=0.7,
-            max_tokens=200
-        )
-        return {
-            "reply": response.choices[0].message.content,
-            "source": "openai"
-        }
-    except:
-        pass
 
-    try:
-        return {
-            "reply": call_huggingface(req.messages),
-            "source": "huggingface"
-        }
-    except:
-        pass
-
-    try:
-        return {
-            "reply": call_ollama(req.messages),
-            "source": "ollama"
-        }
-    except Exception as e:
-        return {"error": "All providers failed", "details": str(e)}
+# 📊 Models endpoint
+@app.get("/models")
+def get_models():
+    return {
+        "providers": list(PROVIDERS.keys()),
+        "default_order": FALLBACK_ORDER
+    }
