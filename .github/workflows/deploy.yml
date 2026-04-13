@@ -18,7 +18,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
 
           script: |
-            cd app || git clone https://github.com/Keerthi2009/gpt-clone.git app && cd app
+            if [ ! -d "app" ]; then
+                git clone https://github.com/Keerthi2009/gpt-clone.git app
+            fi
+            cd app
             git pull origin main
-            docker-compose down
+            docker-compose down || true
             docker-compose up -d --build
