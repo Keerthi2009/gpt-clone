@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 import requests
-import google.generativeai as genai
+import google.genai as genai
 from groq import Groq
 from dotenv import load_dotenv
 
