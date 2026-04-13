@@ -8,7 +8,6 @@ function Chat() {
   const [provider, setProvider] = useState("auto");
 
   const userId = "user_123";
-
   const sendMessage = async () => {
     if (!input) return;
 
