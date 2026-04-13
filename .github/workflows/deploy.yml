@@ -23,5 +23,10 @@ jobs:
             fi
             cd app
             git pull origin main
+
+            # 🔥 FORCE CLEAN OLD CONTAINERS
+            docker rm -f fastapi || true
+            docker rm -f react || true
+
             docker-compose down || true
             docker-compose up -d --build
