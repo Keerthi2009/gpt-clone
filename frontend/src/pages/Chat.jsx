@@ -5,7 +5,7 @@ import "./Chat.css";
 function Chat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
-  const [provider, setProvider] = useState("huggingface");
+  const [provider, setProvider] = useState("auto");
 
   const userId = "user_123";
 
