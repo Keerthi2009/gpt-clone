@@ -3,7 +3,7 @@ fastapi
 pydantic
 openai
 requests
-google.genai
+google-genai
 groq
 dotenv
 jwt

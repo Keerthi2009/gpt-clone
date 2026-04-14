@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 import os
 import requests
-import google.genai as genai
+from google import genai as google_genai
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -23,8 +23,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 # 🔌 Clients (lazy — only initialized if the key is present)
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+gemini_client = google_genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # Request Model
 class ChatRequest(BaseModel):
@@ -58,15 +57,11 @@ def call_groq(messages):
 
 
 def call_gemini(messages):
-    model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
-
-    chat = model.start_chat(history=[
-        {
-            "role": "user" if m["role"] == "user" else "model",
-            "parts": [m["content"]]
-        } for m in messages[:-1]
-    ])
-
+    history = [
+        {"role": "user" if m["role"] == "user" else "model", "parts": m["content"]}
+        for m in messages[:-1]
+    ]
+    chat = gemini_client.chats.create(model="gemini-2.0-flash-lite", history=history)
     response = chat.send_message(messages[-1]["content"])
     return response.text
 
