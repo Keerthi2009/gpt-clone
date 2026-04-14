@@ -3,4 +3,4 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://18.219.90.131:8000
+        VITE_API_URL: http://localhost:8000
