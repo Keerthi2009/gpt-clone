@@ -25,12 +25,12 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 
-# 📦 Request Model
+# Request Model
 class ChatRequest(BaseModel):
     messages: list
     provider: str = "auto"
 
-# 🔧 Utils
+#  Utils
 def format_messages(messages):
     return "\n".join([f"{m['role']}: {m['content']}" for m in messages])
 
