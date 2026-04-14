@@ -20,7 +20,7 @@ function Chat() {
     setInput("");
 
     try {
-      const res = await axios.post("http://localhost:8000/chat", {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/chat`, {
         messages: newMessages,
         user_id: userId,
         provider

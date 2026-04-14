@@ -1,0 +1,6 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://18.219.90.131:8000
