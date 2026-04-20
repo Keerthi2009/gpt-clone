@@ -1,28 +1,25 @@
 # routers/langchain_rag.py
 #
-# PDF Q&A with LangChain — FAISS vector store + conversation memory.
-# Uses langchain_core + langchain_community directly (no langchain.chains import)
-# so it works regardless of the high-level langchain package version.
+# PDF Q&A with LangChain — in-memory numpy retriever + conversation memory.
+# No faiss-cpu needed (removes ~300 MB of C binaries from the Docker image).
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
+from typing import List, Any
 import uuid, io, os
+import numpy as np
 from pypdf import PdfReader
 from dotenv import load_dotenv
 
-# ── langchain_core is the stable low-level package ──
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
+from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
 
-# ── langchain_community for FAISS + embeddings ──
-from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-
-# ── langchain_text_splitters is a standalone package ──
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-# ── LLM providers ──
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 
@@ -32,8 +29,46 @@ router = APIRouter(prefix="/langchain", tags=["LangChain RAG"])
 
 _embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# session_id -> { retriever, chat_history, filename, pages, chunks }
 lc_sessions: dict = {}
+
+
+# ─── Numpy-based in-memory retriever (replaces faiss-cpu) ─────────
+
+class NumpyRetriever(BaseRetriever):
+    """
+    LangChain-compatible retriever backed by numpy cosine similarity.
+    Identical behaviour to FAISS but zero C-extension dependencies.
+    """
+    docs: List[Document]
+    doc_embeddings: Any      # np.ndarray stored as Any to satisfy pydantic
+    embed_model: Any
+    k: int = 3
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        q_vec = np.array(self.embed_model.embed_query(query))
+        matrix = np.array(self.doc_embeddings)
+        # cosine similarity
+        q_norm = np.linalg.norm(q_vec) + 1e-10
+        m_norms = np.linalg.norm(matrix, axis=1) + 1e-10
+        scores = (matrix @ q_vec) / (m_norms * q_norm)
+        top_idx = np.argsort(scores)[::-1][: self.k]
+        return [self.docs[i] for i in top_idx]
+
+
+def build_retriever(docs: List[Document], k: int = 3) -> NumpyRetriever:
+    texts = [d.page_content for d in docs]
+    embeddings = _embeddings.embed_documents(texts)
+    return NumpyRetriever(
+        docs=docs,
+        doc_embeddings=embeddings,
+        embed_model=_embeddings,
+        k=k,
+    )
 
 
 # ─── LLM helper ───────────────────────────────────────────────────
@@ -54,24 +89,13 @@ def get_llm():
     raise HTTPException(500, "No LLM API key configured (GROQ_API_KEY or OPENAI_API_KEY).")
 
 
-# ─── Core RAG logic (pure Python, no langchain.chains) ────────────
+# ─── Core RAG logic ────────────────────────────────────────────────
 
-def run_rag(retriever, chat_history: list, question: str) -> dict:
-    """
-    Two-stage RAG with conversation memory — implemented with langchain_core only.
-
-    Stage 1 — Rephrase:
-      If there is chat history, rewrite the question as a standalone question
-      so the retriever doesn't need the conversation context.
-
-    Stage 2 — Answer:
-      Retrieve the top-k chunks for the (rephrased) question and answer
-      from the document context.
-    """
+def run_rag(retriever: NumpyRetriever, chat_history: list, question: str) -> dict:
     llm = get_llm()
     parser = StrOutputParser()
 
-    # Stage 1: rephrase if we have history
+    # Stage 1: rephrase question if there is chat history
     if chat_history:
         rephrase_prompt = ChatPromptTemplate.from_messages([
             ("system",
@@ -96,8 +120,7 @@ def run_rag(retriever, chat_history: list, question: str) -> dict:
         ("system",
          "You are a helpful assistant answering questions about a document. "
          "Use ONLY the retrieved context below to answer. "
-         "If the answer is not in the context, say so clearly.\n\n"
-         "Context:\n{context}"),
+         "If the answer is not in the context, say so clearly.\n\nContext:\n{context}"),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}"),
     ])
@@ -108,8 +131,10 @@ def run_rag(retriever, chat_history: list, question: str) -> dict:
         "context": context,
     })
 
-    sources = [{"text": d.page_content} for d in docs]
-    return {"answer": answer, "sources": sources}
+    return {
+        "answer": answer,
+        "sources": [{"text": d.page_content} for d in docs],
+    }
 
 
 # ─── Routes ────────────────────────────────────────────────────────
@@ -130,14 +155,11 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(422, "No readable text found in PDF.")
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=75,
+        chunk_size=500, chunk_overlap=75,
         separators=["\n\n", "\n", ".", " "],
     )
     docs = splitter.create_documents([full_text])
-
-    vectorstore = FAISS.from_documents(docs, _embeddings)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    retriever = build_retriever(docs)
 
     session_id = str(uuid.uuid4())
     lc_sessions[session_id] = {
@@ -153,7 +175,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         "filename": file.filename,
         "pages": len(reader.pages),
         "chunks": len(docs),
-        "message": "PDF indexed with LangChain + FAISS. Conversation memory is active.",
+        "message": "PDF indexed with LangChain + numpy retriever. Conversation memory is active.",
     }
 
 
@@ -176,7 +198,6 @@ async def ask(req: AskRequest):
         question=req.question,
     )
 
-    # Persist turn for next call
     session["chat_history"].append(HumanMessage(content=req.question))
     session["chat_history"].append(AIMessage(content=result["answer"]))
 
