@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import chat,auth
+from routers import chat, auth, pdf_qa
 
 app = FastAPI()
 
@@ -12,6 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ include router
+# ✅ include routers
 app.include_router(chat.router)
 app.include_router(auth.router)
+app.include_router(pdf_qa.router)

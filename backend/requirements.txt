@@ -8,3 +8,7 @@ groq
 dotenv
 jwt
 python-jose[cryptography]
+pypdf
+sentence-transformers
+numpy
+python-multipart
