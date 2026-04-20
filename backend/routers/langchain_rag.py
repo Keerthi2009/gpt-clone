@@ -18,7 +18,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
@@ -27,7 +27,7 @@ load_dotenv()
 
 router = APIRouter(prefix="/langchain", tags=["LangChain RAG"])
 
-_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+_embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 
 lc_sessions: dict = {}
 

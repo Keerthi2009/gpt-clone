@@ -6,13 +6,24 @@ import uuid
 import io
 import numpy as np
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding as _FastEmbed
 from .chat import PROVIDERS, FALLBACK_ORDER
 
 router = APIRouter(prefix="/pdf", tags=["PDF Q&A"])
 
-# Load embedding model once at startup (downloads ~80MB on first run)
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+class _EmbedWrapper:
+    """Thin wrapper around fastembed.TextEmbedding with a .encode() interface
+    compatible with the sentence-transformers API used throughout this file."""
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
+        self._model = _FastEmbed(model_name)
+
+    def encode(self, texts, show_progress_bar=False):
+        return np.array(list(self._model.embed(texts)))
+
+
+# Downloads ~30 MB ONNX model on first run (no torch/CUDA required)
+embedding_model = _EmbedWrapper()
 
 # In-memory session store: session_id -> {filename, chunks, embeddings}
 pdf_sessions: dict = {}

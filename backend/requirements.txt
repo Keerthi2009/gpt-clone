@@ -9,7 +9,7 @@ dotenv
 jwt
 python-jose[cryptography]
 pypdf
-sentence-transformers
+fastembed
 numpy
 python-multipart
 langchain
