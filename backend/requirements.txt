@@ -12,3 +12,12 @@ pypdf
 sentence-transformers
 numpy
 python-multipart
+langchain
+langchain-community
+langchain-groq
+langchain-openai
+langchain-text-splitters
+faiss-cpu
+langgraph
+ddgs
+mcp[cli]

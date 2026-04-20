@@ -1,0 +1,141 @@
+.lc-container {
+  padding: 24px;
+  max-width: 820px;
+  margin: auto;
+  font-family: Arial, sans-serif;
+}
+
+/* Header */
+.lc-header { margin-bottom: 20px; }
+.lc-title  { font-size: 24px; margin: 0 0 6px; }
+.lc-subtitle {
+  font-size: 13px; color: #555; margin: 0 0 10px; line-height: 1.5;
+}
+.lc-tech-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.tech-badge {
+  background: #1c7ed6; color: white;
+  font-size: 11px; font-weight: 600;
+  padding: 3px 10px; border-radius: 20px;
+}
+
+/* Upload Zone */
+.lc-upload-zone {
+  border: 2px dashed #aaa; border-radius: 12px;
+  padding: 48px 24px; text-align: center; cursor: pointer;
+  background: #fafafa; transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 16px;
+}
+.lc-upload-zone:hover { border-color: #1c7ed6; background: #e8f4ff; }
+.lc-upload-zone.uploading {
+  cursor: default; pointer-events: none;
+  border-color: #1c7ed6; background: #e8f4ff;
+}
+.lc-uploading { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.lc-spinner {
+  width: 32px; height: 32px; border: 3px solid #ddd;
+  border-top-color: #1c7ed6; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.lc-upload-icon  { font-size: 36px; margin-bottom: 8px; }
+.lc-upload-label { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.lc-upload-hint  { font-size: 12px; color: #888; }
+
+/* Info bar */
+.lc-info-bar {
+  display: flex; align-items: center; gap: 12px;
+  background: #e8f4ff; border: 1px solid #b3d9ff;
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 14px;
+  font-size: 13px;
+}
+.lc-info-detail { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.lc-info-detail strong { font-size: 14px; }
+.lc-info-detail span   { color: #555; }
+.lc-reset-btn {
+  padding: 5px 12px; border: 1px solid #ccc; border-radius: 6px;
+  background: white; cursor: pointer; font-size: 12px;
+}
+.lc-reset-btn:hover { background: #fff0f0; border-color: #e66; }
+
+/* Chat box */
+.lc-chat-box {
+  border: 1px solid #ddd; border-radius: 10px;
+  padding: 14px; min-height: 260px; max-height: 460px;
+  overflow-y: auto; background: #f9f9f9; margin-bottom: 12px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.lc-empty {
+  color: #888; font-size: 13px; text-align: center;
+  margin: auto; line-height: 1.6;
+}
+
+/* Bubbles */
+.lc-entry { display: flex; flex-direction: column; gap: 6px; }
+
+.lc-bubble-row {
+  display: flex; align-items: flex-end; gap: 8px;
+}
+.user-row { flex-direction: row-reverse; }
+.ai-row   { flex-direction: row; }
+
+.lc-bubble {
+  padding: 10px 14px; border-radius: 12px;
+  max-width: 78%; font-size: 14px; line-height: 1.5;
+}
+.user-bubble {
+  background: #d0ebff; border-radius: 12px 12px 0 12px;
+}
+.ai-bubble {
+  background: #e9ecef; border-radius: 12px 12px 12px 0;
+  white-space: pre-wrap;
+}
+
+.lc-label {
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; white-space: nowrap;
+}
+.user-label { background: #1c7ed6; color: white; }
+.ai-label   { background: #495057; color: white; }
+
+/* Thinking dots */
+.thinking {
+  display: flex; align-items: center; gap: 5px; padding: 12px 14px;
+}
+.dot {
+  width: 7px; height: 7px; background: #888;
+  border-radius: 50%; animation: blink 1.2s ease-in-out infinite;
+}
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,100%{opacity:.2} 50%{opacity:1} }
+
+/* Sources */
+.lc-sources { margin-left: 8px; }
+.lc-src-toggle {
+  font-size: 12px; color: #1c7ed6; background: none;
+  border: none; cursor: pointer; text-decoration: underline; padding: 2px 0;
+}
+.lc-src-list {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 6px;
+}
+.lc-src-chunk {
+  background: white; border: 1px solid #dee2e6;
+  border-left: 3px solid #1c7ed6; border-radius: 6px;
+  padding: 8px 12px; font-size: 12px; color: #333; line-height: 1.5;
+}
+
+/* Input */
+.lc-input-row { display: flex; gap: 8px; }
+.lc-input {
+  flex: 1; padding: 10px 14px; border-radius: 8px;
+  border: 1px solid #ccc; font-size: 14px;
+}
+.lc-input:focus { outline: none; border-color: #1c7ed6; }
+.lc-input:disabled { background: #f1f3f5; }
+.lc-send-btn {
+  padding: 10px 20px; border: none; background: #1c7ed6;
+  color: white; border-radius: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 600;
+}
+.lc-send-btn:hover:not(:disabled) { background: #1971c2; }
+.lc-send-btn:disabled { background: #a5c8f0; cursor: default; }
