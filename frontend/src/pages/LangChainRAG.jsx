@@ -1,46 +1,43 @@
 import { useState, useRef } from "react";
 import axios from "axios";
 import "./LangChainRAG.css";
+import { useSession } from "../context/SessionContext";
 
 const API = import.meta.env.VITE_API_URL;
 
-// Tech badges shown in the header
-const TECH = ["LangChain", "FAISS", "Conversation Memory", "LCEL"];
+const TECH = ["LangChain", "Numpy Retriever", "Conversation Memory", "LCEL"];
 
 function LangChainRAG() {
-  const [sessionId, setSessionId]     = useState(null);
-  const [uploadInfo, setUploadInfo]   = useState(null);
-  const [uploadStatus, setUploadStatus] = useState("idle"); // idle|uploading|ready|error
+  // ── Persistent state lives in context (survives tab switches) ──
+  const { langchainRAG, setLangchainRAG } = useSession();
+  const { sessionId, uploadInfo, uploadStatus, history } = langchainRAG;
 
+  const set = (patch) => setLangchainRAG(prev => ({ ...prev, ...patch }));
+
+  // ── Transient UI state stays local ────────────────────────────
   const [question, setQuestion]       = useState("");
-  const [history, setHistory]         = useState([]);   // [{q, a, sources, turn}]
   const [asking, setAsking]           = useState(false);
   const [expandedIdx, setExpandedIdx] = useState(null);
-
   const fileInputRef = useRef(null);
   const chatEndRef   = useRef(null);
 
-  // ── Upload ──────────────────────────────────────────────────────
+  // ── Upload ────────────────────────────────────────────────────
 
   const uploadFile = async (file) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       alert("Only PDF files are supported.");
       return;
     }
-    setUploadStatus("uploading");
-    setSessionId(null);
-    setHistory([]);
+    set({ uploadStatus: "uploading", sessionId: null, uploadInfo: null, history: [] });
     const form = new FormData();
     form.append("file", file);
     try {
       const res = await axios.post(`${API}/langchain/upload`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      setSessionId(res.data.session_id);
-      setUploadInfo(res.data);
-      setUploadStatus("ready");
+      set({ sessionId: res.data.session_id, uploadInfo: res.data, uploadStatus: "ready" });
     } catch (err) {
-      setUploadStatus("error");
+      set({ uploadStatus: "error" });
       alert("Upload failed: " + (err.response?.data?.detail || err.message));
     }
   };
@@ -49,43 +46,36 @@ function LangChainRAG() {
   const handleDrop = (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); };
 
   const reset = () => {
-    setSessionId(null); setUploadInfo(null);
-    setUploadStatus("idle"); setHistory([]);
+    set({ sessionId: null, uploadInfo: null, uploadStatus: "idle", history: [] });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ── Ask ─────────────────────────────────────────────────────────
+  // ── Ask ───────────────────────────────────────────────────────
 
   const ask = async () => {
     if (!question.trim() || !sessionId || asking) return;
     const q = question.trim();
     setQuestion("");
     setAsking(true);
-    setHistory(prev => [...prev, { q, a: null, sources: [], turn: null }]);
+
+    set({ history: [...history, { q, a: null, sources: [], turn: null }] });
 
     try {
       const res = await axios.post(`${API}/langchain/ask`, {
-        session_id: sessionId,
-        question: q,
+        session_id: sessionId, question: q,
       });
-      setHistory(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          q,
-          a: res.data.answer,
-          sources: res.data.sources || [],
-          turn: res.data.turn,
-        };
-        return updated;
+      set({
+        history: [
+          ...history,
+          { q, a: res.data.answer, sources: res.data.sources || [], turn: res.data.turn },
+        ],
       });
     } catch (err) {
-      setHistory(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          q, a: "Error: " + (err.response?.data?.detail || err.message),
-          sources: [], turn: null,
-        };
-        return updated;
+      set({
+        history: [
+          ...history,
+          { q, a: "Error: " + (err.response?.data?.detail || err.message), sources: [], turn: null },
+        ],
       });
     } finally {
       setAsking(false);
@@ -93,11 +83,10 @@ function LangChainRAG() {
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="lc-container">
-      {/* Header */}
       <div className="lc-header">
         <h2 className="lc-title">LangChain RAG</h2>
         <p className="lc-subtitle">
@@ -110,21 +99,16 @@ function LangChainRAG() {
         </div>
       </div>
 
-      {/* Upload Zone */}
       {uploadStatus !== "ready" && (
         <div
           className={`lc-upload-zone ${uploadStatus === "uploading" ? "uploading" : ""}`}
-          onDrop={handleDrop}
-          onDragOver={e => e.preventDefault()}
+          onDrop={handleDrop} onDragOver={e => e.preventDefault()}
           onClick={() => fileInputRef.current?.click()}
         >
           <input ref={fileInputRef} type="file" accept=".pdf"
             onChange={handleFileChange} style={{ display: "none" }} />
           {uploadStatus === "uploading" ? (
-            <div className="lc-uploading">
-              <div className="lc-spinner" />
-              <p>Indexing PDF with FAISS…</p>
-            </div>
+            <div className="lc-uploading"><div className="lc-spinner" /><p>Indexing PDF…</p></div>
           ) : (
             <>
               <div className="lc-upload-icon">📄</div>
@@ -135,19 +119,17 @@ function LangChainRAG() {
         </div>
       )}
 
-      {/* Info bar */}
       {uploadStatus === "ready" && uploadInfo && (
         <div className="lc-info-bar">
           <span>📄</span>
           <div className="lc-info-detail">
             <strong>{uploadInfo.filename}</strong>
-            <span>{uploadInfo.pages} pages · {uploadInfo.chunks} chunks in FAISS index</span>
+            <span>{uploadInfo.pages} pages · {uploadInfo.chunks} chunks indexed</span>
           </div>
           <button className="lc-reset-btn" onClick={reset}>✕ Reset</button>
         </div>
       )}
 
-      {/* Chat */}
       {uploadStatus === "ready" && (
         <>
           <div className="lc-chat-box">
@@ -157,16 +139,12 @@ function LangChainRAG() {
                 <em> "What about X?"</em> to see conversation memory in action.
               </p>
             )}
-
             {history.map((entry, idx) => (
               <div key={idx} className="lc-entry">
-                {/* Question */}
                 <div className="lc-bubble-row user-row">
                   <div className="lc-bubble user-bubble">{entry.q}</div>
                   <span className="lc-label user-label">You</span>
                 </div>
-
-                {/* Answer */}
                 <div className="lc-bubble-row ai-row">
                   <span className="lc-label ai-label">
                     LangChain {entry.turn ? `· turn ${entry.turn}` : ""}
@@ -179,8 +157,6 @@ function LangChainRAG() {
                     <div className="lc-bubble ai-bubble">{entry.a}</div>
                   )}
                 </div>
-
-                {/* Sources */}
                 {entry.sources?.length > 0 && (
                   <div className="lc-sources">
                     <button className="lc-src-toggle"
@@ -201,16 +177,12 @@ function LangChainRAG() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input */}
           <div className="lc-input-row">
-            <input
-              className="lc-input"
-              value={question}
+            <input className="lc-input" value={question}
               onChange={e => setQuestion(e.target.value)}
               onKeyDown={e => e.key === "Enter" && ask()}
               placeholder="Ask a question — follow-ups remember context…"
-              disabled={asking}
-            />
+              disabled={asking} />
             <button className="lc-send-btn" onClick={ask}
               disabled={asking || !question.trim()}>
               {asking ? "…" : "Ask"}

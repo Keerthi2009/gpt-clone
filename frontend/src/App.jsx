@@ -1,6 +1,7 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import "./App.css";
+import { SessionProvider } from "./context/SessionContext";
 
 const Chat           = lazy(() => import("./pages/Chat"));
 const PdfQA          = lazy(() => import("./pages/PdfQA"));
@@ -61,19 +62,21 @@ function HomeCard({ to, title, desc, color }) {
 
 function App() {
   return (
-    <div>
-      <Navbar />
-      <Suspense fallback={<div style={{ padding: 24, color: "#888" }}>Loading…</div>}>
-        <Routes>
-          <Route path="/"              element={<Home />} />
-          <Route path="/chat"          element={<Chat />} />
-          <Route path="/pdf-qa"        element={<PdfQA />} />
-          <Route path="/langchain-rag" element={<LangChainRAG />} />
-          <Route path="/agent"         element={<ResearchAgent />} />
-          <Route path="/mcp"           element={<MCPExplorer />} />
-        </Routes>
-      </Suspense>
-    </div>
+    <SessionProvider>
+      <div>
+        <Navbar />
+        <Suspense fallback={<div style={{ padding: 24, color: "#888" }}>Loading…</div>}>
+          <Routes>
+            <Route path="/"              element={<Home />} />
+            <Route path="/chat"          element={<Chat />} />
+            <Route path="/pdf-qa"        element={<PdfQA />} />
+            <Route path="/langchain-rag" element={<LangChainRAG />} />
+            <Route path="/agent"         element={<ResearchAgent />} />
+            <Route path="/mcp"           element={<MCPExplorer />} />
+          </Routes>
+        </Suspense>
+      </div>
+    </SessionProvider>
   );
 }
 
